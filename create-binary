@@ -1,0 +1,38 @@
+#!/bin/bash -xe
+
+SHDIR=$(cd $(dirname $0) && pwd)
+
+function build () {
+	docker run \
+		--rm \
+		-it \
+		--user=$(id -u):$(id -g) \
+		-v $SHDIR/src/:/src/:ro \
+		-v $SHDIR/bin/:/build/ \
+		custom-emoticons-bot-build-env \
+		bash -c "\
+			cd /src &&
+			CGO_ENABLED=0 \
+			GOOS=$1 \
+			GOARCH=$2 \
+			XDG_CACHE_HOME=/tmp/.cache \
+			go build \
+				-ldflags \"-s -w\" \
+				-o /build/$3 \
+				${@:4}
+		"
+}
+
+docker build \
+	-t custom-emoticons-bot-build-env \
+	-f $SHDIR/Dockerfile.buildenv \
+	$SHDIR
+
+mkdir -p $SHDIR/bin
+
+build linux amd64 custom-emoticons-bot.elf \
+	main.go
+
+build windows amd64 custom-emoticons-bot.exe \
+	main.go
+

@@ -1,0 +1,11 @@
+FROM golang
+
+MAINTAINER yanorei32
+
+RUN go get -v github.com/zpnk/go-bitly && \
+	go get -v github.com/bwmarrin/discordgo && \
+	go get -v gopkg.in/yaml.v3 && \
+	go get -u gopkg.in/go-playground/validator.v9 && \
+	go get -u github.com/mattn/go-colorable && \
+	go get -u github.com/Sirupsen/logrus && \
+	go get -u github.com/konsorten/go-windows-terminal-sequences
