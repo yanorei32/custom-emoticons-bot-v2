@@ -41,13 +41,11 @@ dictionaries:
       reload_on_message: true
 
       # limit (global)
-      reload_limit_sec: 30
+      reload_limit_sec: 0
 
       # whitelist or blacklist
-      guild_selection_mode: whitelist
+      guild_selection_mode: blacklist
       guilds:
-          - 538835926210823966
-          - 316697955710281710
 
     - name: main
 
