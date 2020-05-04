@@ -3,6 +3,7 @@ docker run \
 	--rm \
 	--name custom-emoticons-bot \
 	-v $(cd $(dirname $0) && pwd)/configure.yml:/root/configure.yml:ro \
+	-v $(cd $(dirname $0) && pwd)/sample.csv:/sample.csv:ro \
 	--memory=32mb \
 	yanorei32/custom-emoticons-bot
 

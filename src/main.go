@@ -33,7 +33,8 @@ type Configure struct {
 }
 
 type DictionaryDef struct {
-	CsvUrl				string		`validate:"required,url" yaml:"csv_url"`
+	FileSrc				string		`validate:"required,oneof=fs http" yaml:"filesrc"`
+	Path				string		`validate:"required" yaml:"path"`
 	Name				string		`validate:"required" yaml:"name"`
 	Timeout				int			`validate:"required,min=0" yaml:"timeout"`
 	ReloadLimitSec		int			`validate:"required,min=0" yaml:"reload_limit_sec"`
@@ -107,18 +108,36 @@ func updateDictionary(dd *DictionaryDef, d *Dictionary) error {
 		return nil
 	}
 
-	httpc := &http.Client {
-		Timeout: time.Duration(dd.Timeout) * time.Second,
+	var ioReader io.Reader
+
+	if dd.FileSrc == "http" {
+		httpc := &http.Client {
+			Timeout: time.Duration(dd.Timeout) * time.Second,
+		}
+
+		resp, err := httpc.Get(dd.Path)
+		if err != nil {
+			return err
+		}
+
+		defer resp.Body.Close()
+
+		ioReader = resp.Body
+
+	} else if dd.FileSrc == "fs" {
+		f, err := os.Open(dd.Path)
+
+		if err != nil {
+			return err
+		}
+
+		defer f.Close()
+
+		ioReader = f
+
 	}
 
-	resp, err := httpc.Get(dd.CsvUrl)
-	if err != nil {
-		return err
-	}
-
-	defer resp.Body.Close()
-
-	reader := csv.NewReader(resp.Body)
+	reader := csv.NewReader(ioReader)
 	reader.LazyQuotes = true
 
 	newD := make(map[string]string)
@@ -214,7 +233,6 @@ func main() {
 
 	bl := bitly.New(c.BitlyToken)
 	dg, err := discordgo.New("Bot " + c.DiscordAPIKey)
-
 	if err != nil {
 		logrus.Fatal(err)
 	}
@@ -224,13 +242,15 @@ func main() {
 		escapedQuote + safeChars + escapedQuote,
 	)
 
-	logrus.Info(emoticonRegex)
-	logrus.Info(bl)
-
 	for i, dd := range c.Dictionaries {
 		dictionaries = append(dictionaries, Dictionary{})
 
-		updateDictionary(&dd, &dictionaries[i])
+		err := updateDictionary(&dd, &dictionaries[i])
+		if err != nil {
+			logrus.Error("Dictionary first loading failed: " + dd.Name)
+			logrus.Fatal(err)
+		}
+
 		dictionaries[i].Processed = make(map[string]string)
 
 		if dd.IntervalReloadSec != 0 {
@@ -240,7 +260,11 @@ func main() {
 						time.Duration(dd.IntervalReloadSec) * time.Second,
 					)
 
-					updateDictionary(&dd, &dictionaries[i])
+					err := updateDictionary(&dd, &dictionaries[i])
+					if err != nil {
+						logrus.Error("Dictionary update failed: " + dd.Name)
+						logrus.Error(err)
+					}
 				}
 			}()
 		}
@@ -284,6 +308,10 @@ func main() {
 
 			if dd.ReloadOnMessage {
 				updateDictionary(&dd, &dictionaries[i])
+				if err != nil {
+					logrus.Error("Dictionary onmessage update failed: " + dd.Name)
+					logrus.Error(err)
+				}
 			}
 
 			dictionaries[i].Writing.Lock()
@@ -348,7 +376,7 @@ func main() {
 		logrus.Fatal("error open websocket: ", err)
 	}
 
-	logrus.SetLevel(logrus.DebugLevel)
+	// logrus.SetLevel(logrus.DebugLevel)
 	logrus.Info("Bot is now running.  Press ^C to exit.")
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
