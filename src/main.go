@@ -137,7 +137,7 @@ func updateDictionary(dd *DictionaryDef, d *Dictionary) error {
 	reader := csv.NewReader(ioReader)
 	reader.LazyQuotes = true
 
-	newD := make(map[string]string)
+	nDic := make(map[string]string)
 
 	idRegex := regexp.MustCompile(`\A` + safeChars + `\z`)
 
@@ -156,18 +156,21 @@ func updateDictionary(dd *DictionaryDef, d *Dictionary) error {
 			continue
 		}
 
-		if !idRegex.MatchString(record[0]) {
+		name := record[0]
+		path := record[1]
+
+		if !idRegex.MatchString(name) {
 			continue
 		}
 
-		newD[record[0]] = ""
+		nDic[name] = ""
 
-		if !strings.HasPrefix(record[1], "http") {
+		if !strings.HasPrefix(path, "http") {
 			switch dd.ConcatUrlPrefix {
 			case "discord-smart":
-				newD[record[0]] += discordCdnBaseURI
+				nDic[name] += discordCdnBaseURI
 			case "custom-smart":
-				newD[record[0]] += dd.CustomUrlPrefix
+				nDic[name] += dd.CustomUrlPrefix
 			case "never":
 				break
 			default:
@@ -178,12 +181,12 @@ func updateDictionary(dd *DictionaryDef, d *Dictionary) error {
 			}
 		}
 
-		newD[record[0]] += record[1]
+		nDic[name] += path
 
-		if !strings.HasPrefix(record[1], "http") {
+		if !strings.HasPrefix(path, "http") {
 			switch dd.ConcatUrlSuffix {
 			case "custom-smart":
-				newD[record[0]] += dd.CustomUrlSuffix
+				nDic[name] += dd.CustomUrlSuffix
 			case "never":
 				break
 			default:
@@ -195,8 +198,8 @@ func updateDictionary(dd *DictionaryDef, d *Dictionary) error {
 		}
 
 		if dd.MentionProtection {
-			newD[record[0]] = strings.Replace(
-				newD[record[0]], "@", "%40", -1,
+			nDic[name] = strings.Replace(
+				nDic[name], "@", "%40", -1,
 			)
 		}
 	}
@@ -204,7 +207,7 @@ func updateDictionary(dd *DictionaryDef, d *Dictionary) error {
 	d.Writing.Lock()
 	defer d.Writing.Unlock()
 
-	d.Data = newD
+	d.Data = nDic
 
 	d.UpdatedAt = now
 
