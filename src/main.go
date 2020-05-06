@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/csv"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"math"
@@ -55,12 +56,10 @@ type Dictionary struct {
 	Writing		sync.Mutex
 	UpdatedAt	time.Time
 	Data		map[string]string
-	Processed	map[string]string
 }
 
 var dictionaries []Dictionary
-
-var shortenUrlCache map[string]string
+var shortenCache map[string]string
 
 const (
 	discordCdnBaseURI	= "https://cdn.discordapp.com/attachments/"
@@ -75,7 +74,6 @@ func readConf(path string) (Configure, error) {
 	var c Configure
 
 	buf, err := ioutil.ReadFile(path)
-
 	if err != nil {
 		return c, err
 	}
@@ -126,7 +124,6 @@ func updateDictionary(dd *DictionaryDef, d *Dictionary) error {
 
 	} else if dd.FileSrc == "fs" {
 		f, err := os.Open(dd.Path)
-
 		if err != nil {
 			return err
 		}
@@ -171,6 +168,13 @@ func updateDictionary(dd *DictionaryDef, d *Dictionary) error {
 				newD[record[0]] += discordCdnBaseURI
 			case "custom-smart":
 				newD[record[0]] += dd.CustomUrlPrefix
+			case "never":
+				break
+			default:
+				logrus.Fatal(fmt.Sprintf(
+					"ASSERT: invalid ConcatUrlPrefix passed: %s",
+					dd.ConcatUrlPrefix,
+				))
 			}
 		}
 
@@ -180,23 +184,20 @@ func updateDictionary(dd *DictionaryDef, d *Dictionary) error {
 			switch dd.ConcatUrlSuffix {
 			case "custom-smart":
 				newD[record[0]] += dd.CustomUrlSuffix
+			case "never":
+				break
+			default:
+				logrus.Fatal(fmt.Sprintf(
+					"ASSERT: invalid ConcatUrlSuffix passed: %s",
+					dd.ConcatUrlSuffix,
+				))
 			}
 		}
 
 		if dd.MentionProtection {
 			newD[record[0]] = strings.Replace(
-				newD[record[0]],
-				"@",
-				"%40",
-				-1,
+				newD[record[0]], "@", "%40", -1,
 			)
-		}
-
-		if _, ok := d.Data[record[0]]; ok {
-			if newD[record[0]] != d.Data[record[0]] {
-				logrus.Debug("Delete old cache")
-				delete(d.Processed, record[0])
-			}
 		}
 	}
 
@@ -216,31 +217,29 @@ func main() {
 	logrus.Debug("Read Configuration...")
 
 	binpath, err := os.Executable()
-
 	if err != nil {
 		logrus.Fatal(err)
 	}
 
-	c, err := readConf(filepath.Join(
-		filepath.Dir(binpath),
-		"configure.yml",
-	))
-
+	c, err := readConf(filepath.Join(filepath.Dir(binpath), "configure.yml"))
 	if err != nil {
 		logrus.Fatal(err)
 	}
-
 
 	bl := bitly.New(c.BitlyToken)
+
 	dg, err := discordgo.New("Bot " + c.DiscordAPIKey)
 	if err != nil {
 		logrus.Fatal(err)
 	}
 
 	escapedQuote := regexp.QuoteMeta(c.Quote)
+
 	emoticonRegex := regexp.MustCompile(
 		escapedQuote + safeChars + escapedQuote,
 	)
+
+	shortenCache = make(map[string]string)
 
 	for i, dd := range c.Dictionaries {
 		dictionaries = append(dictionaries, Dictionary{})
@@ -250,8 +249,6 @@ func main() {
 			logrus.Error("Dictionary first loading failed: " + dd.Name)
 			logrus.Fatal(err)
 		}
-
-		dictionaries[i].Processed = make(map[string]string)
 
 		if dd.IntervalReloadSec != 0 {
 			go func () {
@@ -281,35 +278,40 @@ func main() {
 			return
 		}
 
-		groups := emoticonRegex.FindSubmatch([]byte(m.Content))
-		if groups == nil {
+		g := emoticonRegex.FindSubmatch([]byte(m.Content))
+		if g == nil {
 			return
 		}
 
-		emoticonName := string(groups[0][1:len(groups[0])-1])
+		name := string(g[0][1:len(g[0])-1])
 
 		for i, dd := range c.Dictionaries {
-			isFound := false
+			{
+				found := false
 
-			for _, gid := range dd.Guilds {
-				if m.GuildID == gid {
-					isFound = true
-					break
+				for _, gid := range dd.Guilds {
+					if m.GuildID == gid {
+						found = true
+						break
+					}
 				}
-			}
 
-			if isFound && dd.GuildSelectionMode == "blacklist" {
-				continue
-			}
+				if found && dd.GuildSelectionMode == "blacklist" {
+					continue
+				}
 
-			if !isFound && dd.GuildSelectionMode == "whitelist" {
-				continue
+				if !found && dd.GuildSelectionMode == "whitelist" {
+					continue
+				}
 			}
 
 			if dd.ReloadOnMessage {
 				updateDictionary(&dd, &dictionaries[i])
+
 				if err != nil {
-					logrus.Error("Dictionary onmessage update failed: " + dd.Name)
+					logrus.Error(
+						"Dictionary onmessage update failed: " + dd.Name,
+					)
 					logrus.Error(err)
 				}
 			}
@@ -317,59 +319,42 @@ func main() {
 			dictionaries[i].Writing.Lock()
 			defer dictionaries[i].Writing.Unlock()
 
-			_, ok := dictionaries[i].Processed[emoticonName]
-
+			url, ok := dictionaries[i].Data[name]
 			if !ok {
-				original, ok := dictionaries[i].Data[emoticonName]
-
-				if !ok {
-					continue
-				}
-
-				if	dd.UseBitly != "always" && (
-						dd.UseBitly == "never" ||
-						original[len(original) - 3:] == "gif" ) {
-
-					dictionaries[i].Processed[emoticonName] = original
-
-					goto POST_EMOTE
-				}
-
-				linkObj, err := bl.Links.Shorten(
-					original,
-				)
-
-				if err != nil {
-					logrus.Printf(
-						"500 bitly error %s/%s : %s\n",
-						dd.Name,
-						emoticonName,
-						err,
-					)
-
-					continue
-				}
-
-				dictionaries[i].Processed[emoticonName] = linkObj.URL
+				continue
 			}
 
-			POST_EMOTE:
+			if	dd.UseBitly == "always" ||
+				dd.UseBitly != "never" &&
+				url[len(url) - 3:] != "gif" {
+				sUrl, ok := shortenCache[url]
 
-			logrus.Printf(
-				"200 %s/%s",
-				dd.Name,
-				emoticonName,
-			)
+				if !ok {
+					l, err := bl.Links.Shorten(url)
 
-			s.ChannelMessageSend(
-				m.ChannelID,
-				dictionaries[i].Processed[emoticonName],
-			)
+					if err != nil {
+						logrus.Printf(
+							"500 bitly error %s/%s : %s\n",
+							dd.Name, name, err,
+						)
+
+						continue
+					}
+
+					shortenCache[url] = l.URL
+					sUrl = l.URL
+				}
+
+				url = sUrl
+			}
+
+			logrus.Printf("200 %s/%s", dd.Name, name)
+			s.ChannelMessageSend(m.ChannelID, url)
 
 			return
 		}
 
-		logrus.Printf("404 %s", emoticonName)
+		logrus.Printf("404 %s", name)
 	})
 
 	if err := dg.Open(); err != nil {
