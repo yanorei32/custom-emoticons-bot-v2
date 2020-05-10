@@ -26,10 +26,10 @@ dictionaries:
       custom_url_suffix: ?size=1024
 
       # always
-      # without-gif [default]
-      #   - if not ends_with gif
+      # without-video [default]
+      #   - if not ends_with mp4, gif
       # never
-      use_bitly: without-gif
+      use_bitly: without-video
 
       # mension protection (replace '@' to '%40')
       mention_protection: true
@@ -70,10 +70,10 @@ dictionaries:
       custom_url_suffix: ?size=1024
 
       # always
-      # without-gif [default]
-      #   - if not ends_with gif
+      # without-video [default]
+      #   - if not ends_with mp4, gif
       # never
-      use_bitly: without-gif
+      use_bitly: without-video
 
       # mension protection (replace '@' to '%40')
       mention_protection: true

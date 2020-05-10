@@ -36,5 +36,8 @@ build linux amd64 custom-emoticons-bot.elf \
 build windows amd64 custom-emoticons-bot.exe \
 	main.go
 
+build darwin amd64 custom-emoticons-bot.macho \
+	main.go
+
 zip -r custom-emoticons-bot.zip release/
 

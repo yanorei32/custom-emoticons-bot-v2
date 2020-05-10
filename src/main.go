@@ -45,7 +45,7 @@ type DictionaryDef struct {
 	ConcatUrlSuffix		string		`validate:"requored,oneof=smart-custom never" yaml:"concat_url_suffix"`
 	CustomUrlSuffix		string		`yaml:"custom_url_suffix"`
 	MentionProtection	bool		`yaml:"mention_protection"`
-	UseBitly			string		`validate:"required,oneof=always without-gif never" yaml:"use_bitly"`
+	UseBitly			string		`validate:"required,oneof=always without-video never" yaml:"use_bitly"`
 	IntervalReloadSec	int			`validate:"required,min=0" yaml:"interval_reload_sec"`
 	GuildSelectionMode	string		`validate:"required,oneof=whitelist blacklist" yaml:"guild_selection_mode"`
 	Guilds				[]string	`validate:"required,unique,dive,is_guild_id" yaml:"guilds"`
@@ -329,7 +329,8 @@ func main() {
 
 			if	dd.UseBitly == "always" ||
 				dd.UseBitly != "never" &&
-				url[len(url) - 3:] != "gif" {
+				url[len(url) - 3:] != "gif" &&
+				url[len(url) - 3:] != "mp4" {
 				sUrl, ok := shortenCache[url]
 
 				if !ok {

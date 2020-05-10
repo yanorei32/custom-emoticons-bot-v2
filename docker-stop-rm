@@ -1,0 +1,2 @@
+docker stop custom-emoticons-bot
+docker rm custom-emoticons-bot
