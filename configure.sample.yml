@@ -31,7 +31,7 @@ dictionaries:
       # never
       use_bitly: without-video
 
-      # mension protection (replace '@' to '%40')
+      # mention protection (replace '@' to '%40')
       mention_protection: true
 
       # auto reload (0: disabled)
@@ -75,7 +75,7 @@ dictionaries:
       # never
       use_bitly: without-video
 
-      # mension protection (replace '@' to '%40')
+      # mention protection (replace '@' to '%40')
       mention_protection: true
 
       # auto reload (0: disabled)
